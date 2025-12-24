@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="../Auralis.Audio/Auralis.Audio.csproj" />
+  <Project Path="../Auralis.Core/Auralis.Core.csproj" />
+  <Project Path="../Auralis.Infrastructure/Auralis.Infrastructure.csproj" />
+  <Project Path="Auralis.csproj" />
+</Solution>
