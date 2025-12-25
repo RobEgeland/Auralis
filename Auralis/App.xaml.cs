@@ -4,6 +4,7 @@ using Auralis.Core.Engine;
 using Auralis.Core.Logging;
 using Auralis.Core.Persistence;
 using Auralis.Infrastructure.Persistence;
+using Auralis.Infrastructure.Playback;
 using Auralis.Logging;
 using Auralis.Services;
 using Auralis.Tray;
@@ -25,6 +26,7 @@ namespace Auralis
         private IAuralisLogger? _logger;
         private IAudioBehaviorProfileStore? _profileStore;
         private AudioSourceRegistry? _registry;
+        private MediaPlaybackMonitor? _playbackMonitor;
 
 
         protected override void OnStartup(StartupEventArgs e)
@@ -34,6 +36,9 @@ namespace Auralis
             _logger = new FileAuralisLogger();
             _logger.Info("Auralis started");
             _registry = new AudioSourceRegistry();
+            _playbackMonitor = new MediaPlaybackMonitor();
+            _ = InitializePlaybackMonitorAsync();
+
 
             var meter = new WasapiAudioMeter();
             var fader = new WasapiFadeEngine(_logger, _registry);
@@ -43,7 +48,7 @@ namespace Auralis
                           ?? AudioBehaviorProfileFactory.CreateDefaultProfile();
 
 
-            _coordinator = new AudioBehaviorCoordinator(meter, fader, profile, _registry,  _logger);
+            _coordinator = new AudioBehaviorCoordinator(meter, fader, profile, _registry, _playbackMonitor,  _logger);
             _coordinator.StateChanged += OnStateChanged;
 
             _tray = new TrayIconService();
@@ -89,6 +94,25 @@ namespace Auralis
             _logger?.Info($"State changed → {state}");
             _tray?.UpdateStatus(state.ToString());
         }
+
+        private async Task InitializePlaybackMonitorAsync()
+        {
+            try
+            {
+                if (_playbackMonitor == null)
+                    return;
+
+                await _playbackMonitor.InitializeAsync();
+                _logger?.Info("MediaPlaybackMonitor initialized (SMTC active)");
+            }
+            catch (Exception ex)
+            {
+                _logger?.Error("Failed to initialize MediaPlaybackMonitor", ex);
+                // Safe to continue: WASAPI-only fallback still works
+            }
+        }
+
+
     }
 
 

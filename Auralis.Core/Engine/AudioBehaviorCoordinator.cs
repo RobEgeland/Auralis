@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Auralis.Core.Playback;
 
 namespace Auralis.Core.Engine
 {
@@ -24,6 +25,8 @@ namespace Auralis.Core.Engine
         private AudioBehaviorProfile _profile;
         private readonly SilenceDetector _silence;
         private IAuralisLogger? _logger;
+        private readonly IMediaPlaybackMonitor? _playbackMonitor;
+
         public AudioBehaviorProfile CurrentProfile => _profile;
         private AudioSourceRegistry _registry;
 
@@ -40,12 +43,14 @@ namespace Auralis.Core.Engine
         IFadeEngine fader,
         AudioBehaviorProfile profile,
         AudioSourceRegistry registry,
-         IAuralisLogger logger)
+        IMediaPlaybackMonitor? playbackMonitor,
+        IAuralisLogger logger)
         {
             _meter = meter;
             _fader = fader;
             _profile = profile;
             _registry = registry;
+            _playbackMonitor = playbackMonitor;
             _logger = logger;
             _silence = new SilenceDetector(
                 profile.SilenceThresholdDb,
@@ -133,19 +138,27 @@ namespace Auralis.Core.Engine
 
             float primaryDb = _meter.GetCurrentLevelDb(_profile.Primary.SourceKey);
             bool silentHeld = _silence.Update(primaryDb, deltaMs);
-            _logger.Info(
+            bool mediaPlaying = _playbackMonitor?.IsPrimaryPlaying(_profile.Primary.SourceKey) == true;
+            bool primaryInactive =
+                silentHeld && !mediaPlaying;
+            _logger?.Info(
                 $"Primary {_profile.Primary.SourceKey} level = {primaryDb:0.0} dB, silentHeld={silentHeld}");
             Debug.WriteLine(
-                $"Primary {_profile.Primary.SourceKey} level = {primaryDb:0.0} dB, silentHeld={silentHeld}");
+             $"Primary {_profile.Primary.SourceKey} " +
+             $"level={primaryDb:0.0} dB, " +
+             $"audioSilentHeld={silentHeld}, " +
+             $"mediaPlaying={mediaPlaying}, " +
+             $"primaryInactive={primaryInactive}");
+
             if (_fader.IsBusy)
             {
-                _logger.Info("Skipping primary evaluation (fade in progress)");
+                _logger?.Info("Skipping primary evaluation (fade in progress)");
                 return;
             }
 
-            if (_state == AudioBehaviorState.Monitoring && silentHeld)
+            if (_state == AudioBehaviorState.Monitoring && !mediaPlaying)
                 ActivateSecondary();
-            else if (_state == AudioBehaviorState.SecondaryActive && !silentHeld)
+            else if (_state == AudioBehaviorState.SecondaryActive && mediaPlaying)
                 DeactivateSecondary();
         }
 
@@ -156,7 +169,7 @@ namespace Auralis.Core.Engine
 
             SetState(AudioBehaviorState.SecondaryActive);
 
-            _logger.Info(
+            _logger?.Info(
                 $"Activating secondary: {_profile.Secondary.SourceKey}");
 
             StartFade(
@@ -173,7 +186,7 @@ namespace Auralis.Core.Engine
 
             SetState(AudioBehaviorState.Monitoring);
 
-            _logger.Info(
+            _logger?.Info(
                 $"Deactivating secondary: {_profile.Secondary.SourceKey}");
 
             StartFade(
